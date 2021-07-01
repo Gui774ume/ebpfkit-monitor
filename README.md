@@ -30,9 +30,11 @@ Usage:
   ebpfkit-monitor [command]
 
 Available Commands:
+  graph       graph generates a graphviz representation of the ELF file
   help        Help about any command
   map         prints information about one or multiple maps
   prog        prints information about one or multiple programs
+  report      prints summarized information about the maps and programs
 
 Flags:
   -a, --asset string   path to the eBPF asset (ELF format expected)

@@ -48,8 +48,8 @@ var report = &cobra.Command{
 
 var graph = &cobra.Command{
 	Use:   "graph",
-	Short: "graph generates a .dot graph",
-	Long:  "graph generates a .dot graph representing all the programs in the provided ELF file",
+	Short: "graph generates a graphviz representation of the ELF file",
+	Long:  "graph generates a graphviz representation of the ELF file",
 	RunE:  graphCmd,
 }
 
