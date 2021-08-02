@@ -17,6 +17,7 @@ limitations under the License.
 package run
 
 import (
+	"github.com/Gui774ume/ebpfkit-monitor/pkg/model"
 	"github.com/spf13/cobra"
 )
 
@@ -53,15 +54,14 @@ var graph = &cobra.Command{
 	RunE:  graphCmd,
 }
 
-type EBPFKitOptions struct {
-	EBPFAssetPath string
-	Section       string
-	Helper        string
-	Map           string
-	Dump          bool
+var start = &cobra.Command{
+	Use:   "start",
+	Short: "start monitoring the bpf syscall at runtime",
+	Long:  "start monitoring the bpf syscall at runtime and look for malicious behavior",
+	RunE:  startCmd,
 }
 
-var options EBPFKitOptions
+var options model.EBPFKitOptions
 
 func init() {
 	EBPFKitMonitor.PersistentFlags().StringVarP(
@@ -70,7 +70,6 @@ func init() {
 		"a",
 		"",
 		"path to the eBPF asset (ELF format expected)")
-	_ = EBPFKitMonitor.MarkPersistentFlagRequired("asset")
 
 	prog.Flags().StringVarP(
 		&options.Section,
@@ -94,6 +93,7 @@ func init() {
 		"d",
 		false,
 		"dump the program bytecode")
+	_ = prog.MarkPersistentFlagRequired("asset")
 
 	m.Flags().StringVarP(
 		&options.Section,
@@ -101,9 +101,18 @@ func init() {
 		"s",
 		"",
 		"map section to dump")
+	_ = m.MarkPersistentFlagRequired("asset")
+
+	start.Flags().StringArrayVar(
+		&options.AllowedProcesses,
+		"allowed-processes",
+		[]string{},
+		"defines the list of binary paths which processes are allowed to use the bpf syscall. Each path will be truncated past its first 350 characters. When this parameter is not set, any process can use the bpf syscall.",
+	)
 
 	EBPFKitMonitor.AddCommand(prog)
 	EBPFKitMonitor.AddCommand(m)
 	EBPFKitMonitor.AddCommand(report)
 	EBPFKitMonitor.AddCommand(graph)
+	EBPFKitMonitor.AddCommand(start)
 }

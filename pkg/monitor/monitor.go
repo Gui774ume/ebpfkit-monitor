@@ -23,7 +23,10 @@ import (
 
 	"github.com/DataDog/ebpf"
 	"github.com/DataDog/ebpf/asm"
+	"github.com/DataDog/ebpf/manager"
 	"github.com/pkg/errors"
+
+	"github.com/Gui774ume/ebpfkit-monitor/pkg/model"
 )
 
 // Monitor is the main Monitor structure
@@ -42,9 +45,13 @@ type Monitor struct {
 	helpers        map[asm.BuiltinFunc]map[string]int
 	mapTypes       map[ebpf.MapType]map[string]int
 	mapPrograms    map[string]map[string]int
+
+	// runtime monitoring
+	manager *manager.Manager
+	options model.EBPFKitOptions
 }
 
-func (e *Monitor) parseAsset(asset string) error {
+func (m *Monitor) parseAsset(asset string) error {
 	if _, err := os.Stat(asset); err != nil {
 		return err
 	}
@@ -54,7 +61,7 @@ func (e *Monitor) parseAsset(asset string) error {
 		return err
 	}
 
-	e.collectionSpec, err = ebpf.LoadCollectionSpecFromReader(f)
+	m.collectionSpec, err = ebpf.LoadCollectionSpecFromReader(f)
 	if err != nil {
 		return err
 	}
@@ -62,8 +69,8 @@ func (e *Monitor) parseAsset(asset string) error {
 }
 
 // NewMonitor returns a new Monitor instance
-func NewMonitor(asset string) (*Monitor, error) {
-	e := &Monitor{
+func NewMonitor(options model.EBPFKitOptions) (*Monitor, error) {
+	m := &Monitor{
 		helperTranslation: make(map[string]asm.BuiltinFunc),
 		programTypes:      make(map[ebpf.ProgramType]map[string]int),
 		programMaps:       make(map[string]map[string]int),
@@ -71,6 +78,7 @@ func NewMonitor(asset string) (*Monitor, error) {
 		helpers:           make(map[asm.BuiltinFunc]map[string]int),
 		mapTypes:          make(map[ebpf.MapType]map[string]int),
 		mapPrograms:       make(map[string]map[string]int),
+		options:           options,
 	}
 
 	// build eBPF helper translation
@@ -79,7 +87,7 @@ func NewMonitor(asset string) (*Monitor, error) {
 	for {
 		helper = asm.BuiltinFunc(i)
 		if !strings.HasPrefix(helper.String(), "BuiltinFunc") {
-			e.helperTranslation[helper.String()] = helper
+			m.helperTranslation[helper.String()] = helper
 			i++
 		} else {
 			break
@@ -87,38 +95,39 @@ func NewMonitor(asset string) (*Monitor, error) {
 	}
 
 	// parse asset
-	if err := e.parseAsset(asset); err != nil {
-		return nil, errors.Wrapf(err, "couldn't parse asset %s", asset)
+	if len(options.EBPFAssetPath) > 0 {
+		if err := m.parseAsset(options.EBPFAssetPath); err != nil {
+			return nil, errors.Wrapf(err, "couldn't parse asset %s", options.EBPFAssetPath)
+		}
+		// process eBPF assets
+		m.processAssets()
 	}
-
-	// process eBPF assets
-	e.processAssets()
-	return e, nil
+	return m, nil
 }
 
 // ShowProgram prints information about the provided program section. If no section is provided, all the programs will
 // be displayed.
-func (e *Monitor) ShowProgram(section string, dumpByteCode bool, helper string, m string) error {
+func (m *Monitor) ShowProgram(section string, dumpByteCode bool, helper string, mapName string) error {
 	// if a program section is provided, dump program info
 	if len(section) != 0 {
-		spec, ok := e.collectionSpec.Programs[section]
+		programSpec, ok := m.collectionSpec.Programs[section]
 		if !ok {
 			return errors.Errorf("%s section not found", section)
 		}
 
 		if len(helper) > 0 {
-			if e.programHelpers[spec.SectionName][e.helperTranslation[helper]] <= 0 {
+			if m.programHelpers[programSpec.SectionName][m.helperTranslation[helper]] <= 0 {
 				return errors.Errorf("section %s doesn't use eBPF helper %s", section, helper)
 			}
 		}
 
-		if len(m) > 0 {
-			if e.programMaps[spec.SectionName][m] <= 0 {
-				return errors.Errorf("section %s doesn't use map %s", section, m)
+		if len(mapName) > 0 {
+			if m.programMaps[programSpec.SectionName][mapName] <= 0 {
+				return errors.Errorf("section %s doesn't use map %s", section, mapName)
 			}
 		}
 
-		e.printProgramSpec(spec, dumpByteCode)
+		m.printProgramSpec(programSpec, dumpByteCode)
 		return nil
 	}
 
@@ -127,24 +136,24 @@ func (e *Monitor) ShowProgram(section string, dumpByteCode bool, helper string, 
 	// select programs by helpers
 	if len(helper) > 0 {
 		shouldFilter = true
-		for prog := range e.helpers[e.helperTranslation[helper]] {
-			if len(m) > 0 {
-				if e.programMaps[prog][m] > 0 {
+		for prog := range m.helpers[m.helperTranslation[helper]] {
+			if len(mapName) > 0 {
+				if m.programMaps[prog][mapName] > 0 {
 					selectedSections = append(selectedSections, prog)
 				}
 			} else {
 				selectedSections = append(selectedSections, prog)
 			}
 		}
-	} else if len(m) > 0 {
+	} else if len(mapName) > 0 {
 		shouldFilter = true
-		for prog := range e.mapPrograms[m] {
+		for prog := range m.mapPrograms[mapName] {
 			selectedSections = append(selectedSections, prog)
 		}
 	}
 
 CollectionSpec:
-	for _, spec := range e.collectionSpec.Programs {
+	for _, spec := range m.collectionSpec.Programs {
 		if shouldFilter {
 			selectedSection := false
 			for _, section := range selectedSections {
@@ -156,12 +165,12 @@ CollectionSpec:
 				continue CollectionSpec
 			}
 		}
-		e.printProgramSpec(spec, dumpByteCode)
+		m.printProgramSpec(spec, dumpByteCode)
 	}
 	return nil
 }
 
-func (e *Monitor) printProgramSpec(spec *ebpf.ProgramSpec, dumpByteCode bool) {
+func (m *Monitor) printProgramSpec(spec *ebpf.ProgramSpec, dumpByteCode bool) {
 	fmt.Printf("%s\n", spec.Name)
 	fmt.Printf("  SectionName: %s\n", spec.SectionName)
 	fmt.Printf("  Type: %s\n", spec.Type)
@@ -172,18 +181,18 @@ func (e *Monitor) printProgramSpec(spec *ebpf.ProgramSpec, dumpByteCode bool) {
 	fmt.Printf("  ByteOrder: %s\n", spec.ByteOrder)
 
 	// Print list of eBPF helpers
-	if len(e.programHelpers[spec.SectionName]) > 0 {
+	if len(m.programHelpers[spec.SectionName]) > 0 {
 		fmt.Println("  Helpers:")
 	}
-	for helper, count := range e.programHelpers[spec.SectionName] {
+	for helper, count := range m.programHelpers[spec.SectionName] {
 		fmt.Printf("    - %s: %d\n", helper, count)
 	}
 
 	// Print list of maps
-	if len(e.programMaps[spec.SectionName]) > 0 {
+	if len(m.programMaps[spec.SectionName]) > 0 {
 		fmt.Println("  Maps:")
 	}
-	for m, count := range e.programMaps[spec.SectionName] {
+	for m, count := range m.programMaps[spec.SectionName] {
 		fmt.Printf("    - %s: %d\n", m, count)
 	}
 
@@ -195,25 +204,25 @@ func (e *Monitor) printProgramSpec(spec *ebpf.ProgramSpec, dumpByteCode bool) {
 
 // ShowMap prints information about the provided map section. If no section is provided, all the maps will
 // be displayed.
-func (e *Monitor) ShowMap(section string) error {
+func (m *Monitor) ShowMap(section string) error {
 	// if a map section is provided, dump map info
 	if len(section) != 0 {
-		spec, ok := e.collectionSpec.Maps[section]
+		spec, ok := m.collectionSpec.Maps[section]
 		if !ok {
 			return errors.Errorf("%s section not found in %s", section, section)
 		}
-		e.printMapSpec(spec, section)
+		m.printMapSpec(spec, section)
 		return nil
 	}
 
 	// if not, dump all maps
-	for sec, spec := range e.collectionSpec.Maps {
-		e.printMapSpec(spec, sec)
+	for sec, spec := range m.collectionSpec.Maps {
+		m.printMapSpec(spec, sec)
 	}
 	return nil
 }
 
-func (e *Monitor) printMapSpec(spec *ebpf.MapSpec, section string) {
+func (m *Monitor) printMapSpec(spec *ebpf.MapSpec, section string) {
 	fmt.Printf("%s\n", spec.Name)
 	fmt.Printf("  SectionName: %s\n", section)
 	fmt.Printf("  Type: %s\n", spec.Type)
@@ -222,18 +231,18 @@ func (e *Monitor) printMapSpec(spec *ebpf.MapSpec, section string) {
 	fmt.Printf("  ValueSize: %d\n", spec.ValueSize)
 	fmt.Printf("  MaxEntries: %d\n", spec.MaxEntries)
 
-	if len(e.mapPrograms[spec.Name]) > 0 {
+	if len(m.mapPrograms[spec.Name]) > 0 {
 		fmt.Println("  Programs:")
 	}
-	for p, count := range e.mapPrograms[spec.Name] {
+	for p, count := range m.mapPrograms[spec.Name] {
 		fmt.Printf("    - %s: %d\n", p, count)
 	}
 	fmt.Println()
 }
 
-func (e *Monitor) ShowReport() error {
-	fmt.Printf("Program types report (detected %d different types):\n", len(e.programTypes))
-	for t, progs := range e.programTypes {
+func (m *Monitor) ShowReport() error {
+	fmt.Printf("Program types report (detected %d different types):\n", len(m.programTypes))
+	for t, progs := range m.programTypes {
 		fmt.Printf("  - %s:\n", t)
 		for p := range progs {
 			fmt.Printf("    * %s\n", p)
@@ -241,8 +250,8 @@ func (e *Monitor) ShowReport() error {
 	}
 	fmt.Printf("\n\n")
 
-	fmt.Printf("eBPF helpers report (detected %d different helpers):\n", len(e.programHelpers))
-	for helper, progs := range e.helpers {
+	fmt.Printf("eBPF helpers report (detected %d different helpers):\n", len(m.programHelpers))
+	for helper, progs := range m.helpers {
 		fmt.Printf("  - %s:\n", helper)
 		for p, count := range progs {
 			fmt.Printf("    * %s: %d\n", p, count)
@@ -250,12 +259,12 @@ func (e *Monitor) ShowReport() error {
 	}
 	fmt.Printf("\n\n")
 
-	fmt.Printf("Map types report (detected %d different types):\n", len(e.mapTypes))
-	for t, maps := range e.mapTypes {
+	fmt.Printf("Map types report (detected %d different types):\n", len(m.mapTypes))
+	for t, maps := range m.mapTypes {
 		fmt.Printf("  - %s:\n", t)
-		for m := range maps {
-			fmt.Printf("    * %s\n", m)
-			for p, count := range e.mapPrograms[m] {
+		for mp := range maps {
+			fmt.Printf("    * %s\n", mp)
+			for p, count := range m.mapPrograms[mp] {
 				fmt.Printf("      + %s: %d\n", p, count)
 			}
 		}
@@ -263,67 +272,95 @@ func (e *Monitor) ShowReport() error {
 	return nil
 }
 
-func (e *Monitor) processAssets() {
+func (m *Monitor) processAssets() {
 	// Compute maps
 	var mList []string
-	for _, m := range e.collectionSpec.Maps {
-		mList = append(mList, m.Name)
-		if e.mapTypes[m.Type] == nil {
-			e.mapTypes[m.Type] = map[string]int{}
+	for _, mp := range m.collectionSpec.Maps {
+		mList = append(mList, mp.Name)
+		if m.mapTypes[mp.Type] == nil {
+			m.mapTypes[mp.Type] = map[string]int{}
 		}
-		e.mapTypes[m.Type][m.Name] = 1
+		m.mapTypes[mp.Type][mp.Name] = 1
 	}
 
 	// Compute programs
-	for _, p := range e.collectionSpec.Programs {
-		if e.programTypes[p.Type] == nil {
-			e.programTypes[p.Type] = map[string]int{}
+	for _, p := range m.collectionSpec.Programs {
+		if m.programTypes[p.Type] == nil {
+			m.programTypes[p.Type] = map[string]int{}
 		}
-		e.programTypes[p.Type][p.SectionName] = 1
+		m.programTypes[p.Type][p.SectionName] = 1
 
-		if len(p.Instructions) > e.maxProgLength {
-			e.maxProgLength = len(p.Instructions)
+		if len(p.Instructions) > m.maxProgLength {
+			m.maxProgLength = len(p.Instructions)
 		}
 		for _, ins := range p.Instructions {
 			if ins.OpCode.Class() == asm.JumpClass && ins.OpCode.JumpOp() == asm.Call && ins.Src != asm.PseudoCall {
 				helper := asm.BuiltinFunc(ins.Constant)
 
-				if e.helpers[helper] == nil {
-					e.helpers[helper] = map[string]int{}
+				if m.helpers[helper] == nil {
+					m.helpers[helper] = map[string]int{}
 				}
-				e.helpers[helper][p.SectionName] += 1
+				m.helpers[helper][p.SectionName] += 1
 
-				if e.programHelpers[p.SectionName] == nil {
-					e.programHelpers[p.SectionName] = map[asm.BuiltinFunc]int{}
+				if m.programHelpers[p.SectionName] == nil {
+					m.programHelpers[p.SectionName] = map[asm.BuiltinFunc]int{}
 				}
-				e.programHelpers[p.SectionName][helper] += 1
+				m.programHelpers[p.SectionName][helper] += 1
 			}
 			if len(ins.Reference) > 0 && stringArrayContains(mList, ins.Reference) {
-				if e.mapPrograms[ins.Reference] == nil {
-					e.mapPrograms[ins.Reference] = map[string]int{}
+				if m.mapPrograms[ins.Reference] == nil {
+					m.mapPrograms[ins.Reference] = map[string]int{}
 				}
-				e.mapPrograms[ins.Reference][p.SectionName] += 1
+				m.mapPrograms[ins.Reference][p.SectionName] += 1
 
-				if e.programMaps[p.SectionName] == nil {
-					e.programMaps[p.SectionName] = map[string]int{}
+				if m.programMaps[p.SectionName] == nil {
+					m.programMaps[p.SectionName] = map[string]int{}
 				}
-				e.programMaps[p.SectionName][ins.Reference] += 1
+				m.programMaps[p.SectionName][ins.Reference] += 1
 			}
 		}
 	}
 
-	for _, progs := range e.mapPrograms {
-		if len(progs) > e.maxProgsPerMap {
-			e.maxProgsPerMap = len(progs)
+	for _, progs := range m.mapPrograms {
+		if len(progs) > m.maxProgsPerMap {
+			m.maxProgsPerMap = len(progs)
 		}
 	}
 }
 
-func (e *Monitor) IsValidHelper(helper string) bool {
+func (m *Monitor) IsValidHelper(helper string) bool {
 	if len(helper) == 0 {
 		return true
 	}
-	return e.helperTranslation[helper] != 0
+	return m.helperTranslation[helper] != 0
+}
+
+func (m *Monitor) Start() error {
+	// fetch the current process executable path
+	execPath, err := os.Readlink("/proc/self/exe")
+	if err != nil {
+		return errors.Wrap(err, "couldn't fetch the current process executable path")
+	}
+
+	// prepare eBPF manager
+	if err := m.setupEbpfManager(execPath); err != nil {
+		return errors.Wrap(err, "failed to setup eBPF manager")
+	}
+
+	// insert allowed binaries if they exist
+
+	// start manager
+	if err := m.manager.Start(); err != nil {
+		return errors.Wrap(err, "failed to start eBPF manager")
+	}
+	return nil
+}
+
+func (m *Monitor) Stop() error {
+	if err := m.manager.Stop(manager.CleanAll); err != nil {
+		return errors.Wrap(err, "failed to stop eBPF manager")
+	}
+	return nil
 }
 
 func stringArrayContains(array []string, elem string) bool {

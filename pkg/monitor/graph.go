@@ -66,7 +66,7 @@ type graph struct {
 	Edges    []edge
 }
 
-func (e *Monitor) GenerateGraph(title string) error {
+func (m *Monitor) GenerateGraph(title string) error {
 	tmpl := `digraph {
       label     = "{{ .Title }}"
       labelloc  =  "t"
@@ -95,7 +95,7 @@ func (e *Monitor) GenerateGraph(title string) error {
       {{ end }}
 	}
 `
-	data := e.prepareGraphData(title)
+	data := m.prepareGraphData(title)
 
 	f, err := ioutil.TempFile("/tmp", "ebpfkit-monitor-graph-")
 	if err != nil {
@@ -116,14 +116,14 @@ func (e *Monitor) GenerateGraph(title string) error {
 	return nil
 }
 
-func (e *Monitor) prepareGraphData(title string) graph {
+func (m *Monitor) prepareGraphData(title string) graph {
 	data := graph{
 		Title: title,
 		Maps:  make(map[string]node),
 	}
 	var i int
 
-	for t, progs := range e.programTypes {
+	for t, progs := range m.programTypes {
 		cls := cluster{
 			ID:    fmt.Sprintf("cluster_%d", i),
 			Label: t.String(),
@@ -133,7 +133,7 @@ func (e *Monitor) prepareGraphData(title string) graph {
 
 		for p := range progs {
 			var prog *ebpf.ProgramSpec
-			for _, pr := range e.collectionSpec.Programs {
+			for _, pr := range m.collectionSpec.Programs {
 				if pr.SectionName == p {
 					prog = pr
 				}
@@ -144,23 +144,23 @@ func (e *Monitor) prepareGraphData(title string) graph {
 			cls.Nodes[prog.SectionName] = node{
 				ID:    generateNodeID(prog.SectionName),
 				Label: prog.SectionName,
-				Size:  len(prog.Instructions)/e.maxProgLength*40 + 30,
+				Size:  len(prog.Instructions)/m.maxProgLength*40 + 30,
 				Color: colors[int(prog.Type)%len(colors)],
 			}
 		}
 		data.Programs = append(data.Programs, cls)
 	}
-	for _, m := range e.collectionSpec.Maps {
-		data.Maps[m.Name] = node{
-			ID:    generateNodeID(m.Name),
-			Label: m.Name,
-			Size:  len(e.mapPrograms[m.Name])/e.maxProgsPerMap*40 + 30,
+	for _, mp := range m.collectionSpec.Maps {
+		data.Maps[mp.Name] = node{
+			ID:    generateNodeID(mp.Name),
+			Label: mp.Name,
+			Size:  len(m.mapPrograms[mp.Name])/m.maxProgsPerMap*40 + 30,
 			Color: "#8fbbff",
 		}
 	}
 
-	for _, prog := range e.collectionSpec.Programs {
-		for m := range e.programMaps[prog.SectionName] {
+	for _, prog := range m.collectionSpec.Programs {
+		for m := range m.programMaps[prog.SectionName] {
 			data.Edges = append(data.Edges, edge{
 				Link:  fmt.Sprintf("%s -> %s", generateNodeID(prog.SectionName), generateNodeID(m)),
 				Color: colors[int(prog.Type)%len(colors)],
