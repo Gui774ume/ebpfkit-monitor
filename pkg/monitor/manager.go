@@ -1,16 +1,32 @@
+/*
+Copyright © 2021 GUILLAUME FOURNIER
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
 package monitor
 
 import (
 	"bytes"
 	"math"
-
-	"github.com/Gui774ume/ebpfkit-monitor/pkg/assets"
-
-	"github.com/pkg/errors"
+	"os"
 
 	"github.com/DataDog/ebpf"
 	"github.com/DataDog/ebpf/manager"
+	"github.com/pkg/errors"
 	"golang.org/x/sys/unix"
+
+	"github.com/Gui774ume/ebpfkit-monitor/pkg/assets"
 )
 
 const (
@@ -23,6 +39,10 @@ func (m *Monitor) getAllProbes() []*manager.Probe {
 		{Section: "tracepoint/sched/sched_process_exec", UID: EBPFKitMonitorID},
 		{Section: "tracepoint/sched/sched_process_fork", UID: EBPFKitMonitorID},
 		{Section: "tracepoint/sched/sched_process_exit", UID: EBPFKitMonitorID},
+		{Section: "kprobe/security_bpf", UID: EBPFKitMonitorID},
+		{Section: "kprobe/security_bpf_map", UID: EBPFKitMonitorID},
+		{Section: "kprobe/security_bpf_prog", UID: EBPFKitMonitorID},
+		{Section: "kprobe/check_helper_call", UID: EBPFKitMonitorID},
 	}
 
 	// Make sure to append the bpf probe at the end, otherwise there is a race condition that might prevent the monitor
@@ -30,7 +50,7 @@ func (m *Monitor) getAllProbes() []*manager.Probe {
 	attrProbes = append(attrProbes, ExpandSyscallProbes(&manager.Probe{
 		UID:             EBPFKitMonitorID,
 		SyscallFuncName: "bpf",
-	}, Entry)...)
+	}, EntryAndExit)...)
 
 	return attrProbes
 }
@@ -77,6 +97,17 @@ func (m *Monitor) setupEbpfManager(executable string) error {
 		Probes: m.getAllProbes(),
 		Maps: []*manager.Map{
 			{Name: "allowed_binaries", Contents: m.options.GetAllowedProcessesKV(executable)},
+		},
+		PerfMaps: []*manager.PerfMap{
+			{
+				Map: manager.Map{
+					Name: "events",
+				},
+				PerfMapOptions: manager.PerfMapOptions{
+					PerfRingBufferSize: 8192 * os.Getpagesize(),
+					DataHandler:        m.eventsHandler,
+				},
+			},
 		},
 	}
 

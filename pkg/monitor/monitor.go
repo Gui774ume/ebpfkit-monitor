@@ -1,5 +1,5 @@
 /*
-Copyright © 2020 GUILLAUME FOURNIER
+Copyright © 2021 GUILLAUME FOURNIER
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -17,14 +17,19 @@ limitations under the License.
 package monitor
 
 import (
+	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/DataDog/ebpf"
 	"github.com/DataDog/ebpf/asm"
 	"github.com/DataDog/ebpf/manager"
+	"github.com/DataDog/gopsutil/host"
 	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
 
 	"github.com/Gui774ume/ebpfkit-monitor/pkg/model"
 )
@@ -34,6 +39,8 @@ type Monitor struct {
 	collectionSpec *ebpf.CollectionSpec
 	maxProgLength  int
 	maxProgsPerMap int
+	bootTime       time.Time
+	outputFile     *os.File
 
 	// eBPF helpers
 	helperTranslation map[string]asm.BuiltinFunc
@@ -70,6 +77,15 @@ func (m *Monitor) parseAsset(asset string) error {
 
 // NewMonitor returns a new Monitor instance
 func NewMonitor(options model.EBPFKitOptions) (*Monitor, error) {
+	// Set log level
+	logrus.SetLevel(options.LogLevel)
+
+	// Get boot time
+	bt, err := host.BootTime()
+	if err != nil {
+		return nil, err
+	}
+
 	m := &Monitor{
 		helperTranslation: make(map[string]asm.BuiltinFunc),
 		programTypes:      make(map[ebpf.ProgramType]map[string]int),
@@ -79,6 +95,7 @@ func NewMonitor(options model.EBPFKitOptions) (*Monitor, error) {
 		mapTypes:          make(map[ebpf.MapType]map[string]int),
 		mapPrograms:       make(map[string]map[string]int),
 		options:           options,
+		bootTime:          time.Unix(int64(bt), 0),
 	}
 
 	// build eBPF helper translation
@@ -101,6 +118,14 @@ func NewMonitor(options model.EBPFKitOptions) (*Monitor, error) {
 		}
 		// process eBPF assets
 		m.processAssets()
+	}
+
+	// create output file if applicable
+	if len(options.OutputDirectory) > 0 {
+		m.outputFile, err = ioutil.TempFile(options.OutputDirectory, "ebpfkit-monitor-*.json")
+		if err != nil {
+			return nil, errors.Wrapf(err, "failed to generate output file")
+		}
 	}
 	return m, nil
 }
@@ -347,27 +372,46 @@ func (m *Monitor) Start() error {
 		return errors.Wrap(err, "failed to setup eBPF manager")
 	}
 
-	// insert allowed binaries if they exist
-
 	// start manager
 	if err := m.manager.Start(); err != nil {
 		return errors.Wrap(err, "failed to start eBPF manager")
+	}
+	logrus.Info("ebpfkit-monitor is now running !")
+	if m.outputFile != nil {
+		logrus.Infof("writting captured events to: %s", m.outputFile.Name())
 	}
 	return nil
 }
 
 func (m *Monitor) Stop() error {
+	logrus.Info("shutting down ...")
+
 	if err := m.manager.Stop(manager.CleanAll); err != nil {
 		return errors.Wrap(err, "failed to stop eBPF manager")
+	}
+	if m.outputFile != nil {
+		if err := m.outputFile.Close(); err != nil {
+			return errors.Wrap(err, "failed to close output file")
+		}
 	}
 	return nil
 }
 
-func stringArrayContains(array []string, elem string) bool {
-	for _, a := range array {
-		if elem == a {
-			return true
-		}
+func (m *Monitor) eventsHandler(cpu int, data []byte, perfMap *manager.PerfMap, m2 *manager.Manager) {
+	var evt model.Event
+	if _, err := evt.UnmarshalBinary(data, m.bootTime); err != nil {
+		logrus.Warnf("failed to decode event: %s", err)
 	}
-	return false
+	logrus.Debugf("%s", evt)
+
+	if m.outputFile != nil {
+		data, err := json.Marshal(evt)
+		if err != nil {
+			logrus.Warnf("couldn't marshall event: %v", err)
+			return
+		}
+		_, _ = m.outputFile.Write(data)
+		_, _ = m.outputFile.Write([]byte{'\n'})
+	}
+	return
 }

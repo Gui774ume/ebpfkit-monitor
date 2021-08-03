@@ -1,5 +1,5 @@
 /*
-Copyright © 2020 GUILLAUME FOURNIER
+Copyright © 2021 GUILLAUME FOURNIER
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -80,9 +80,8 @@ func startCmd(cmd *cobra.Command, args []string) error {
 		logrus.Fatalf("failed to start ebpfkit-monitor: %v", err)
 	}
 
-	logrus.Info("ebpfkit-monitor is now running ...")
 	wait()
-	logrus.Info("shutting down ...")
+
 	if err = mon.Stop(); err != nil {
 		logrus.Fatalf("failed to stop ebpfkit-monitor: %v", err)
 	}

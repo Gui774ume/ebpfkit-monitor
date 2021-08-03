@@ -176,13 +176,12 @@
 
 #define PATH_MAX_LEN 350
 
-struct path_t
-{
+struct path_t {
     char filename[PATH_MAX_LEN];
 };
 
 struct bpf_map_def SEC("maps/allowed_binaries") allowed_binaries = {
-    .type = BPF_MAP_TYPE_HASH,
+    .type = BPF_MAP_TYPE_LRU_HASH,
     .key_size = sizeof(struct path_t),
     .value_size = sizeof(u32),
     .max_entries = 1024,
@@ -191,7 +190,7 @@ struct bpf_map_def SEC("maps/allowed_binaries") allowed_binaries = {
 };
 
 struct bpf_map_def SEC("maps/allowed_cookies") allowed_cookies = {
-    .type = BPF_MAP_TYPE_HASH,
+    .type = BPF_MAP_TYPE_LRU_HASH,
     .key_size = sizeof(u32),
     .value_size = sizeof(u32),
     .max_entries = 1024,
@@ -200,10 +199,83 @@ struct bpf_map_def SEC("maps/allowed_cookies") allowed_cookies = {
 };
 
 struct bpf_map_def SEC("maps/tgid_cookie") tgid_cookie = {
-    .type = BPF_MAP_TYPE_HASH,
+    .type = BPF_MAP_TYPE_LRU_HASH,
     .key_size = sizeof(u32),
     .value_size = sizeof(u32),
     .max_entries = 1024,
+    .pinning = 0,
+    .namespace = "",
+};
+
+struct map_t {
+    u32 id;
+    enum bpf_map_type map_type;
+    char name[BPF_OBJ_NAME_LEN];
+};
+
+struct bpf_map_def SEC("maps/bpf_maps") bpf_maps = {
+    .type = BPF_MAP_TYPE_LRU_HASH,
+    .key_size = sizeof(u32),
+    .value_size = sizeof(struct map_t),
+    .max_entries = 4096,
+    .pinning = 0,
+    .namespace = "",
+};
+
+struct prog_t {
+    u32 id;
+    enum bpf_prog_type prog_type;
+    enum bpf_attach_type attach_type;
+    u32 padding;
+    u64 helpers[3];
+    char name[BPF_OBJ_NAME_LEN];
+};
+
+struct bpf_map_def SEC("maps/bpf_progs") bpf_progs = {
+    .type = BPF_MAP_TYPE_LRU_HASH,
+    .key_size = sizeof(u32),
+    .value_size = sizeof(struct prog_t),
+    .max_entries = 4096,
+    .pinning = 0,
+    .namespace = "",
+};
+
+struct tgid_fd_t {
+    u32 tgid;
+    u32 fd;
+};
+
+struct bpf_map_def SEC("maps/tgid_fd_map_id") tgid_fd_map_id = {
+    .type = BPF_MAP_TYPE_LRU_HASH,
+    .key_size = sizeof(struct tgid_fd_t),
+    .value_size = sizeof(u32),
+    .max_entries = 4096,
+    .pinning = 0,
+    .namespace = "",
+};
+
+struct bpf_map_def SEC("maps/tgid_fd_prog_id") tgid_fd_prog_id = {
+    .type = BPF_MAP_TYPE_LRU_HASH,
+    .key_size = sizeof(struct tgid_fd_t),
+    .value_size = sizeof(u32),
+    .max_entries = 4096,
+    .pinning = 0,
+    .namespace = "",
+};
+
+struct bpf_event_t {
+    u64 timestamp;
+    int cmd;
+    u32 padding;
+    struct map_t map;
+    struct prog_t prog;
+};
+
+struct bpf_map_def SEC("maps/events") events = {
+    .type = BPF_MAP_TYPE_PERF_EVENT_ARRAY,
+    .key_size = sizeof(__u32),
+    .value_size = sizeof(__u32),
+    .max_entries = 0,
     .pinning = 0,
     .namespace = "",
 };

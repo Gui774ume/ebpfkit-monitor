@@ -15,6 +15,9 @@
 
 #include <uapi/linux/perf_event.h>
 #include <uapi/linux/bpf_perf_event.h>
+#include <linux/bpf.h>
+#include <linux/filter.h>
+#include <uapi/linux/bpf.h>
 /* In Linux 5.4 asm_inline was introduced, but it's not supported by clang.
  * Redefine it to just asm to enable successful compilation.
  */
@@ -45,6 +48,7 @@
 
 // ebpfkit-monitor probes
 #include "monitor/defs.h"
+#include "monitor/context.h"
 #include "monitor/bpf.h"
 #include "monitor/exec.h"
 

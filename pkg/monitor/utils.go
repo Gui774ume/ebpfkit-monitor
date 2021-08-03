@@ -14,19 +14,13 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package main
+package monitor
 
-import (
-	"github.com/sirupsen/logrus"
-
-	"github.com/Gui774ume/ebpfkit-monitor/cmd/ebpfkit-monitor/run"
-)
-
-func main() {
-	logrus.SetFormatter(&logrus.TextFormatter{
-		FullTimestamp:          true,
-		TimestampFormat:        "2006-01-02T15:04:05Z",
-		DisableLevelTruncation: true,
-	})
-	run.EBPFKitMonitor.Execute()
+func stringArrayContains(array []string, elem string) bool {
+	for _, a := range array {
+		if elem == a {
+			return true
+		}
+	}
+	return false
 }

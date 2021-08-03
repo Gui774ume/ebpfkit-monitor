@@ -1,5 +1,5 @@
 /*
-Copyright © 2020 GUILLAUME FOURNIER
+Copyright © 2021 GUILLAUME FOURNIER
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -70,6 +70,11 @@ func init() {
 		"a",
 		"",
 		"path to the eBPF asset (ELF format expected)")
+	EBPFKitMonitor.PersistentFlags().VarP(
+		model.NewLogLevelSanitizer(&options.LogLevel),
+		"log-level",
+		"l",
+		`log level (options: panic, fatal, error, warn, info, debug or trace). Set to "debug" to see bpf events.`)
 
 	prog.Flags().StringVarP(
 		&options.Section,
@@ -108,6 +113,13 @@ func init() {
 		"allowed-processes",
 		[]string{},
 		"defines the list of binary paths which processes are allowed to use the bpf syscall. Each path will be truncated past its first 350 characters. When this parameter is not set, any process can use the bpf syscall.",
+	)
+	start.Flags().StringVarP(
+		&options.OutputDirectory,
+		"output",
+		"o",
+		"",
+		"output directory for the collected events (json)",
 	)
 
 	EBPFKitMonitor.AddCommand(prog)
