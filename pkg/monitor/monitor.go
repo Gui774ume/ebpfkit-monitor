@@ -104,7 +104,7 @@ func NewMonitor(options model.EBPFKitOptions) (*Monitor, error) {
 	for {
 		helper = asm.BuiltinFunc(i)
 		if !strings.HasPrefix(helper.String(), "BuiltinFunc") {
-			m.helperTranslation[helper.String()] = helper
+			m.helperTranslation[model.HelperFunc(helper).String()] = helper
 			i++
 		} else {
 			break
@@ -198,9 +198,9 @@ CollectionSpec:
 func (m *Monitor) printProgramSpec(spec *ebpf.ProgramSpec, dumpByteCode bool) {
 	fmt.Printf("%s\n", spec.Name)
 	fmt.Printf("  SectionName: %s\n", spec.SectionName)
-	fmt.Printf("  Type: %s\n", spec.Type)
+	fmt.Printf("  Type: %s\n", model.ProgramType(spec.Type))
 	fmt.Printf("  InstructionsCount: %d\n", len(spec.Instructions))
-	fmt.Printf("  AttachType: %d\n", spec.AttachType)
+	fmt.Printf("  AttachType: %d\n", model.AttachType(spec.AttachType))
 	fmt.Printf("  License: %s\n", spec.License)
 	fmt.Printf("  KernelVersion: %d\n", spec.KernelVersion)
 	fmt.Printf("  ByteOrder: %s\n", spec.ByteOrder)
@@ -210,7 +210,7 @@ func (m *Monitor) printProgramSpec(spec *ebpf.ProgramSpec, dumpByteCode bool) {
 		fmt.Println("  Helpers:")
 	}
 	for helper, count := range m.programHelpers[spec.SectionName] {
-		fmt.Printf("    - %s: %d\n", helper, count)
+		fmt.Printf("    - %s: %d\n", model.HelperFunc(helper), count)
 	}
 
 	// Print list of maps
@@ -250,7 +250,7 @@ func (m *Monitor) ShowMap(section string) error {
 func (m *Monitor) printMapSpec(spec *ebpf.MapSpec, section string) {
 	fmt.Printf("%s\n", spec.Name)
 	fmt.Printf("  SectionName: %s\n", section)
-	fmt.Printf("  Type: %s\n", spec.Type)
+	fmt.Printf("  Type: %s\n", model.MapType(spec.Type))
 	fmt.Printf("  Flags: %d\n", spec.Flags)
 	fmt.Printf("  KeySize: %d\n", spec.KeySize)
 	fmt.Printf("  ValueSize: %d\n", spec.ValueSize)
@@ -268,7 +268,7 @@ func (m *Monitor) printMapSpec(spec *ebpf.MapSpec, section string) {
 func (m *Monitor) ShowReport() error {
 	fmt.Printf("Program types report (detected %d different types):\n", len(m.programTypes))
 	for t, progs := range m.programTypes {
-		fmt.Printf("  - %s:\n", t)
+		fmt.Printf("  - %s:\n", model.ProgramType(t))
 		for p := range progs {
 			fmt.Printf("    * %s\n", p)
 		}
@@ -277,7 +277,7 @@ func (m *Monitor) ShowReport() error {
 
 	fmt.Printf("eBPF helpers report (detected %d different helpers):\n", len(m.programHelpers))
 	for helper, progs := range m.helpers {
-		fmt.Printf("  - %s:\n", helper)
+		fmt.Printf("  - %s:\n", model.HelperFunc(helper))
 		for p, count := range progs {
 			fmt.Printf("    * %s: %d\n", p, count)
 		}
@@ -286,7 +286,7 @@ func (m *Monitor) ShowReport() error {
 
 	fmt.Printf("Map types report (detected %d different types):\n", len(m.mapTypes))
 	for t, maps := range m.mapTypes {
-		fmt.Printf("  - %s:\n", t)
+		fmt.Printf("  - %s:\n", model.MapType(t))
 		for mp := range maps {
 			fmt.Printf("    * %s\n", mp)
 			for p, count := range m.mapPrograms[mp] {

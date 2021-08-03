@@ -64,12 +64,6 @@ var start = &cobra.Command{
 var options model.EBPFKitOptions
 
 func init() {
-	EBPFKitMonitor.PersistentFlags().StringVarP(
-		&options.EBPFAssetPath,
-		"asset",
-		"a",
-		"",
-		"path to the eBPF asset (ELF format expected)")
 	EBPFKitMonitor.PersistentFlags().VarP(
 		model.NewLogLevelSanitizer(&options.LogLevel),
 		"log-level",
@@ -98,7 +92,13 @@ func init() {
 		"d",
 		false,
 		"dump the program bytecode")
-	_ = prog.MarkPersistentFlagRequired("asset")
+	prog.Flags().StringVarP(
+		&options.EBPFAssetPath,
+		"asset",
+		"a",
+		"",
+		"path to the eBPF asset (ELF format expected)")
+	_ = prog.MarkFlagRequired("asset")
 
 	m.Flags().StringVarP(
 		&options.Section,
@@ -106,7 +106,29 @@ func init() {
 		"s",
 		"",
 		"map section to dump")
-	_ = m.MarkPersistentFlagRequired("asset")
+	m.Flags().StringVarP(
+		&options.EBPFAssetPath,
+		"asset",
+		"a",
+		"",
+		"path to the eBPF asset (ELF format expected)")
+	_ = m.MarkFlagRequired("asset")
+
+	graph.Flags().StringVarP(
+		&options.EBPFAssetPath,
+		"asset",
+		"a",
+		"",
+		"path to the eBPF asset (ELF format expected)")
+	_ = graph.MarkFlagRequired("asset")
+
+	report.Flags().StringVarP(
+		&options.EBPFAssetPath,
+		"asset",
+		"a",
+		"",
+		"path to the eBPF asset (ELF format expected)")
+	_ = report.MarkFlagRequired("asset")
 
 	start.Flags().StringArrayVar(
 		&options.AllowedProcesses,

@@ -144,6 +144,7 @@ __attribute__((always_inline)) void send_event(struct pt_regs *ctx, struct bpf_c
         .timestamp = bpf_ktime_get_ns(),
         .cmd = bpf_ctx->cmd,
     };
+    bpf_get_current_comm(&evt.comm, sizeof(evt.comm));
 
     // select map if applicable
     if (bpf_ctx->map_id != 0) {

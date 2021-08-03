@@ -269,6 +269,7 @@ struct bpf_event_t {
     u32 padding;
     struct map_t map;
     struct prog_t prog;
+    char comm[TASK_COMM_LEN];
 };
 
 struct bpf_map_def SEC("maps/events") events = {

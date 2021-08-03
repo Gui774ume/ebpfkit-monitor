@@ -29,10 +29,11 @@ type Event struct {
 	Command   BPFCmd    `json:"command"`
 	Map       *Map      `json:"map,omitempty"`
 	Program   *Program  `json:"program,omitempty"`
+	Comm      string    `json:"comm,omitempty"`
 }
 
 func (e Event) String() string {
-	s := fmt.Sprintf("cmd:%s", e.Command)
+	s := fmt.Sprintf("cmd:%s comm:%s", e.Command, e.Comm)
 	if e.Map != nil && e.Map.ID > 0 {
 		s += fmt.Sprintf(" map:%s", e.Map)
 	}
@@ -77,7 +78,13 @@ func (e *Event) UnmarshalBinary(data []byte, bootTime time.Time) (int, error) {
 	if e.Program.ID == 0 {
 		e.Program = nil
 	}
-	return cursor, nil
+
+	if len(data) < cursor+16 {
+		return 0, ErrNotEnoughData
+	}
+
+	e.Comm = bytes.NewBuffer(bytes.Trim(data[cursor:cursor+16], "\x00")).String()
+	return cursor + 16, nil
 }
 
 type Map struct {
