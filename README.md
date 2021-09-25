@@ -13,7 +13,7 @@ This project is **not** an official Datadog product (experimental or otherwise),
 ## System requirements
 
 - golang 1.13+
-- This project was developed on an Ubuntu Focal machine (Linux Kernel 5.4)
+- This project was developed on a Ubuntu Focal machine (Linux Kernel 5.4)
 - Kernel headers are expected to be installed in `lib/modules/$(uname -r)` (see `Makefile`)
 - clang & llvm (11.0.1)
 - Graphviz (to generate graphs)
