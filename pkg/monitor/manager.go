@@ -42,7 +42,7 @@ func (m *Monitor) getAllProbes() []*manager.Probe {
 		{Section: "kprobe/security_bpf", UID: EBPFKitMonitorID},
 		{Section: "kprobe/security_bpf_map", UID: EBPFKitMonitorID},
 		{Section: "kprobe/security_bpf_prog", UID: EBPFKitMonitorID},
-		{Section: "kprobe/check_helper_call", UID: EBPFKitMonitorID},
+		{Section: "kprobe/check_helper_call", MatchFuncName: "check_helper_call", UID: EBPFKitMonitorID},
 	}
 
 	// Make sure to append the bpf probe at the end, otherwise there is a race condition that might prevent the monitor

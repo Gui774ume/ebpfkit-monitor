@@ -269,7 +269,7 @@ int kprobe_check_helper_call(struct pt_regs *ctx) {
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5,13,0)
     struct bpf_insn *insn = (struct bpf_insn *)PT_REGS_PARM2(ctx);
-    int ret = bpf_probe_read(&func_id, sizeof(func_id), &insn->imm);
+    bpf_probe_read(&func_id, sizeof(func_id), &insn->imm);
 #else
     func_id = (int)PT_REGS_PARM2(ctx);
 #endif
